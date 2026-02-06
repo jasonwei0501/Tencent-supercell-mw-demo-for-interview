@@ -3877,6 +3877,122 @@
     }
     
     console.log("Patch v17.0: Precision Nav Listener Loaded.");
+    <script>
+    console.log("[v18.0] 正在覆盖旧逻辑...");
+
+    // 1. 【核心修复】重写启动引擎：注入数据 + 强制刷新
+    // ---------------------------------------------------------------
+    window.launchRealEngine = function(type) {
+        console.log("[Injector] 启动实战引擎: " + type);
+        
+        // A. 处理金币领取 (Gift)
+        if (type === 'gift') {
+            if (typeof window.gameState !== 'undefined') {
+                // 1. 修改真实数据
+                window.gameState.resources.gold += 500;
+                
+                // 2. 尝试刷新UI (调用原游戏可能存在的更新函数，或手动更新DOM)
+                // 假设原游戏是 Vue/React，改数据会自动刷新。如果是原生JS，通常有 renderHeader 或 updateUI
+                if (typeof window.renderHeader === 'function') window.renderHeader(); 
+                else if (typeof window.updateUI === 'function') window.updateUI();
+                else {
+                    // 暴力DOM更新兜底
+                    const goldEl = document.querySelector('.header-resource span'); // 猜测选择器
+                    if(goldEl) goldEl.innerText = window.gameState.resources.gold;
+                }
+                
+                alert("💰 到账成功！\n当前金币: " + window.gameState.resources.gold);
+            } else {
+                alert("🎉 (演示) 已领取 500 金币！");
+            }
+            return;
+        }
+
+        // B. 处理战斗跳转 (Demon / Aid / Betray)
+        // 构造虚拟领土数据
+        let fakeTerritory = {
+            id: 10000 + Math.floor(Math.random() * 9000), // 确保ID不重复
+            name: "未知区域",
+            desc: "社交事件",
+            resources: 100,
+            difficulty: 3, // 稍微难一点
+            owner: 'System',
+            purified: false, // 确保是未占领状态，触发征服逻辑
+            troops: 500 // 敌兵数量
+        };
+
+        if (type === 'demon') {
+            fakeTerritory.name = "🔥 魔王城";
+            fakeTerritory.desc = "击败暴躁皮卡 (PVP)";
+            fakeTerritory.resources = 5000;
+            fakeTerritory.difficulty = 5;
+        } else if (type === 'aid') {
+            fakeTerritory.name = "🛡️ 支援前线";
+            fakeTerritory.desc = "协助好友防守";
+            fakeTerritory.resources = 500;
+        } else if (type === 'betray') {
+            fakeTerritory.name = "🗡️ 背刺行动";
+            fakeTerritory.desc = "高风险高回报";
+            fakeTerritory.resources = 2000;
+        }
+
+        // --- 关键修复步骤 ---
+        // 1. 将虚拟领土“注册”到全局游戏状态中
+        // 这样原有的 conquerTerritory 函数在校验 ID 时就能找到了
+        if (typeof window.gameState !== 'undefined' && Array.isArray(window.gameState.territories)) {
+            window.gameState.territories.push(fakeTerritory);
+            console.log("[Injector] 虚拟领土已注入 gameState");
+        }
+
+        // 2. 更新页面标题（视觉反馈）
+        const header = document.querySelector('.header-title') || document.querySelector('h1');
+        if (header) header.innerText = "⚔️ " + fakeTerritory.name;
+
+        // 3. 调用原生战斗函数
+        if (typeof window.conquerTerritory === 'function') {
+            // 传入刚刚注入的那个对象
+            window.conquerTerritory(fakeTerritory);
+            
+            // 4. 再次强制隐藏社交层（双重保险）
+            // 防止原有函数报错导致也没切换，社交层还挡着
+            document.getElementById('final-social-layer').style.display = 'none';
+            document.getElementById('final-modal').style.display = 'none';
+
+        } else {
+            console.error("致命错误：未找到 window.conquerTerritory");
+            alert("⚠️ 无法启动战斗：原游戏逻辑未加载");
+        }
+    };
+
+    // 2. 增强版桥接器 (Bridge)
+    // ---------------------------------------------------------------
+    // 确保先切Tab，再注入数据
+    window.bridgeToBattle = function(type) {
+        // 1. 关闭社交层
+        hideSocial(); 
+
+        // 2. 自动点击“领土” (模拟切回主页)
+        const buttons = document.querySelectorAll('button, div, span, .footer-item');
+        let homeClicked = false;
+        
+        for (let btn of buttons) {
+            let t = (btn.innerText || "").trim();
+            // 排除掉社交按钮，找领土
+            if (t.includes("领土") && !t.includes("社交")) {
+                btn.click();
+                homeClicked = true;
+                break;
+            }
+        }
+
+        // 3. 延迟执行注入 (给页面切换留 200ms 渲染时间)
+        setTimeout(() => {
+            launchRealEngine(type);
+        }, 200);
+    };
+
+    console.log("[v18.0] 逻辑注入修复完毕。现在点击领津贴会加钱，讨伐会真实跳转。");
+</script>
 </script>
 </body>
 </html>
