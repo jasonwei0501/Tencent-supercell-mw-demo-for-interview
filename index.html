@@ -3558,5 +3558,389 @@
     if(document.getElementById('world-map')) renderWorldMap();
     if(document.getElementById('territory-list-content')) renderTerritoryList();
     </script>
+    <style>
+    /* --- 1. 唯一的入口：社交动态按钮 --- */
+    #social-hub-btn {
+        position: fixed;
+        top: 20px;
+        right: 20px; /* 放在右上角，符合常规习惯 */
+        z-index: 9000;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: 1px solid #ffd700;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        backdrop-filter: blur(5px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        transition: transform 0.2s;
+    }
+    #social-hub-btn:hover { transform: scale(1.05); background: rgba(0,0,0,0.9); }
+    
+    /* 红点动画 */
+    .hub-red-dot {
+        width: 8px; height: 8px; background: #ff4d4d;
+        border-radius: 50%; display: inline-block;
+        animation: hubBlink 1.5s infinite;
+    }
+    @keyframes hubBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* --- 2. 社交动态面板 (The Feed) --- */
+    #social-feed-modal {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 9100;
+        justify-content: center;
+        align-items: center;
+    }
+    .feed-window {
+        width: 340px;
+        background: #1a1a1a;
+        border-radius: 12px;
+        border: 1px solid #444;
+        box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        overflow: hidden;
+        animation: slideUp 0.3s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    .feed-header {
+        background: linear-gradient(90deg, #222, #333);
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #555;
+        color: white;
+        font-weight: bold;
+    }
+    .feed-content {
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 10px;
+    }
+
+    /* 动态条目样式 */
+    .feed-card {
+        background: #252525;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+        border-left: 4px solid #555;
+        position: relative;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .feed-card:active { transform: scale(0.98); }
+    
+    /* 不同类型的事件卡片 */
+    .card-hero { border-left-color: #ff4d4d; background: linear-gradient(90deg, #2a1111, #252525); }
+    .card-knight { border-left-color: #00d4ff; background: linear-gradient(90deg, #0a1a2a, #252525); }
+    .card-demon { border-left-color: #800080; background: linear-gradient(90deg, #1a0a1a, #252525); }
+    
+    .card-title { font-size: 13px; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; }
+    .card-desc { font-size: 12px; color: #ccc; line-height: 1.4; margin-bottom: 8px; }
+    .card-btn {
+        font-size: 11px; padding: 4px 10px; border-radius: 4px; border: none;
+        color: white; font-weight: bold; cursor: pointer; display: inline-block;
+    }
+
+    /* --- 3. 通用全屏演示容器 (用于各个Demo场景) --- */
+    .demo-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: #000;
+        z-index: 9500;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 80px;
+        color: white;
+    }
+    
+    /* 模拟布阵网格 */
+    .grid-mockup {
+        width: 280px; height: 280px;
+        background: #222; border: 2px solid #555;
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        margin: 20px 0;
+        position: relative;
+    }
+    .grid-mockup div { border: 1px solid #333; }
+    
+    /* 模拟战斗画面 */
+    .battle-screen-mockup {
+        width: 300px; height: 200px;
+        background: #111; border: 2px solid #666;
+        position: relative; margin-bottom: 20px; overflow: hidden;
+    }
+    .sprite { position: absolute; font-size: 24px; transition: all 0.5s; }
+
+    /* 顶部横幅通知 */
+    .top-banner {
+        position: fixed; top: -100px; left: 0; width: 100%;
+        padding: 10px; text-align: center; z-index: 9999;
+        font-weight: bold; font-size: 14px; color: white;
+        transition: top 0.5s; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    }
+</style>
+
+<div id="social-hub-btn" onclick="toggleFeed()">
+    <span class="hub-red-dot"></span> 社交动态
+</div>
+
+<div id="social-feed-modal">
+    <div class="feed-window">
+        <div class="feed-header">
+            <span>🌍 全服动态流</span>
+            <span style="cursor:pointer; font-size:20px;" onclick="toggleFeed()">×</span>
+        </div>
+        <div class="feed-content">
+            
+            <div class="feed-card card-hero" onclick="startHeroDemo()">
+                <div class="card-title">
+                    <span style="color:#ff4d4d">🔥 恐怖降临</span>
+                    <span style="font-size:10px; color:#888">刚刚</span>
+                </div>
+                <div class="card-desc">玩家 <b>"暴躁的皮卡"</b> 成为了第 108 代魔王！悬赏金池已累积至 50,000。</div>
+                <button class="card-btn" style="background:#ff4d4d">⚔️ 前往讨伐</button>
+            </div>
+
+            <div class="feed-card card-knight" onclick="startKnightDemo()">
+                <div class="card-title">
+                    <span style="color:#00d4ff">🛡️ 爵位空缺</span>
+                    <span style="font-size:10px; color:#888">10分钟前</span>
+                </div>
+                <div class="card-desc">皇室护卫队正在招募指挥官。晋升后可解锁 <b>[公会红包]</b> 特权。</div>
+                <button class="card-btn" style="background:#007bff">👑 申请晋升</button>
+            </div>
+
+            <div class="feed-card card-demon" onclick="startDemonAttackDemo()">
+                <div class="card-title">
+                    <span style="color:#d8bfd8">😈 血脉觉醒</span>
+                    <span style="font-size:10px; color:#888">30分钟前</span>
+                </div>
+                <div class="card-desc">感受到地底深处的黑暗召唤... 是否通过献祭金币来觉醒魔王形态？</div>
+                <button class="card-btn" style="background:#800080">🩸 注入能量</button>
+            </div>
+
+            <div class="feed-card card-demon" onclick="startDemonDefenseDemo()">
+                <div class="card-title">
+                    <span style="color:#ffcc00">⚠️ 领土警报</span>
+                    <span style="font-size:10px; color:#888">1小时前</span>
+                </div>
+                <div class="card-desc">好友 <b>"隔壁老王"</b> 正在偷袭你的金库！防御体系即将崩溃。</div>
+                <button class="card-btn" style="background:#b35900">🛡️ 立即回防</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div id="demo-stage" class="demo-overlay">
+    <h2 id="demo-title" style="margin:0 0 10px 0; color:#ffd700;">演示标题</h2>
+    <p id="demo-subtitle" style="font-size:12px; color:#ccc; margin-bottom:20px;">...</p>
+    
+    <div id="demo-content-area" style="display:flex; flex-direction:column; align-items:center;">
+        </div>
+
+    <div id="demo-controls" style="margin-top:20px;">
+        </div>
+    
+    <div style="margin-top:30px; font-size:12px; color:#666; cursor:pointer;" onclick="closeDemo()">[退出演示]</div>
+</div>
+
+<div id="global-banner" class="top-banner">通知内容</div>
+
+<script>
+    // --- 全局变量 ---
+    let demonAttackStage = 0; // 魔王进攻阶段 (0=败, 1=胜)
+    
+    // --- 基础 UI 控制 ---
+    function toggleFeed() {
+        const modal = document.getElementById('social-feed-modal');
+        modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function closeDemo() {
+        document.getElementById('demo-stage').style.display = 'none';
+        // 演示结束后重新打开 Feed，方便尝试其他功能
+        document.getElementById('social-feed-modal').style.display = 'flex';
+        // 清理横幅
+        document.getElementById('global-banner').style.top = "-100px";
+    }
+
+    function showBanner(text, color) {
+        const banner = document.getElementById('global-banner');
+        banner.innerHTML = text;
+        banner.style.background = color;
+        banner.style.top = "0";
+        setTimeout(() => banner.style.top = "-100px", 3500);
+    }
+
+    // ==========================================
+    // 场景 A: 英雄讨伐 (Patch 3.0 Logic)
+    // ==========================================
+    function startHeroDemo() {
+        setupDemoView("⚔️ 讨伐魔王", "全服围攻正在进行中...");
+        
+        const area = document.getElementById('demo-content-area');
+        area.innerHTML = `
+            <div class="battle-screen-mockup" style="border-color:#ff4d4d">
+                <div class="sprite" style="top:20px; left:50%; transform:translateX(-50%); font-size:50px;">😈</div>
+                <div id="hero-unit" class="sprite" style="bottom:20px; left:50%; opacity:0;">🛡️</div>
+                <div id="battle-msg" style="position:absolute; top:40%; width:100%; text-align:center; font-weight:bold; font-size:24px;"></div>
+            </div>
+            <div id="battle-log" style="width:300px; height:100px; font-size:12px; color:#0f0; text-align:left; font-family:monospace; overflow:hidden;">
+                > 正在连接战场数据流...
+            </div>
+        `;
+        
+        // 自动播放脚本
+        const log = document.getElementById('battle-log');
+        const unit = document.getElementById('hero-unit');
+        const msg = document.getElementById('battle-msg');
+        
+        // 1. 路人送死
+        setTimeout(() => { log.innerHTML += "<br>> 玩家 '路人A' 发起进攻..."; unit.innerHTML="🤕"; unit.style.opacity=1; unit.style.left="30%"; }, 800);
+        setTimeout(() => { log.innerHTML += "<br>> <span style='color:red'>系统: 路人A 被秒杀!</span>"; unit.style.opacity=0; msg.innerHTML="FAIL"; msg.style.color="red"; msg.style.display="block"; }, 2000);
+        
+        // 2. 主角登场
+        setTimeout(() => { 
+            msg.style.display="none"; 
+            log.innerHTML += "<br>> <span style='color:cyan'>玩家 [你] 切入战场!</span>"; 
+            unit.innerHTML="👑"; unit.style.opacity=1; unit.style.left="50%"; 
+        }, 3000);
+        
+        // 3. 胜利
+        setTimeout(() => {
+            log.innerHTML += "<br>> <span style='color:gold'>系统: 暴击! 魔王被击败!</span>";
+            msg.innerHTML = "VICTORY!"; msg.style.color = "gold"; msg.style.display = "block";
+            showBanner("🎉 恭喜! 你击败了魔王，获得赏金 5000!", "linear-gradient(90deg, #d4af37, #f0e68c)");
+        }, 4500);
+    }
+
+    // ==========================================
+    // 场景 B: 晋升骑士 (Patch 4.0 Logic)
+    // ==========================================
+    function startKnightDemo() {
+        setupDemoView("🛡️ 皇家防线布署", "请布置阵容以激活骑士特权");
+        
+        const area = document.getElementById('demo-content-area');
+        area.innerHTML = `
+            <div class="grid-mockup">
+                <div style="background:#444; grid-column:span 4; grid-row:span 4; display:flex; align-items:center; justify-content:center; color:#666;">
+                    (点击下方按钮一键布阵)
+                </div>
+            </div>
+        `;
+        
+        const controls = document.getElementById('demo-controls');
+        controls.innerHTML = `<button onclick="knightDeployStep()" style="padding:10px 30px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer;">✅ 确认布阵</button>`;
+    }
+
+    function knightDeployStep() {
+        const controls = document.getElementById('demo-controls');
+        controls.innerHTML = "正在同步服务器...";
+        
+        setTimeout(() => {
+            showBanner("🎉 你已晋升皇家骑士! (可发红包功能已激活)", "#007bff");
+            
+            // 2秒后魔王入侵
+            setTimeout(() => {
+                showBanner("⚠️ 警报! 魔王军团正在试探你的防线!", "#ff4d4d");
+                setupDemoView("⚔️ 防守战役", "第一波攻势抵挡成功...");
+                // 模拟第一波胜利
+                setTimeout(() => {
+                    alert("✅ 第一波防守成功！\n获得声望 +100。\n\n(剧情：紧接着第二波会失败，引导充值或重修防御)");
+                    closeDemo();
+                }, 1500);
+            }, 2500);
+        }, 1000);
+    }
+
+    // ==========================================
+    // 场景 C: 魔王觉醒 (Patch 5.0 Logic)
+    // ==========================================
+    function startDemonAttackDemo() {
+        setupDemoView("🔥 攻陷皇城", "目标：击碎皇家骑士的圣光护盾");
+        
+        const area = document.getElementById('demo-content-area');
+        area.innerHTML = `
+            <div class="battle-screen-mockup" style="background:#200; border-color:#800000;">
+                <div style="position:absolute; right:10px; top:20px; font-size:40px;">🏰</div>
+                <div style="position:absolute; right:10px; top:70px; font-size:10px; color:gold;">护盾: 100%</div>
+                <div id="demon-army" style="position:absolute; left:-50px; top:50px; font-size:30px;">😈🦇</div>
+            </div>
+        `;
+
+        const controls = document.getElementById('demo-controls');
+        if (demonAttackStage === 0) {
+            controls.innerHTML = `<button onclick="demonAttackLogic()" style="padding:10px 30px; background:#800000; color:white; border:1px solid red; cursor:pointer;">⚔️ 发起总攻</button>`;
+        } else {
+            controls.innerHTML = `<button onclick="demonAttackLogic()" style="padding:10px 30px; background:#ff0000; color:white; border:none; font-weight:bold; cursor:pointer;">🔥 注入黑暗能量 (复仇)</button>`;
+        }
+    }
+
+    function demonAttackLogic() {
+        const army = document.getElementById('demon-army');
+        // 进攻动画
+        army.style.transition = "left 1s";
+        army.style.left = "150px";
+
+        setTimeout(() => {
+            if (demonAttackStage === 0) {
+                // 第一次：败
+                alert("💀 进攻失败！\n皇家护盾太厚了。\n\n提示：你需要更强大的黑暗能量...");
+                demonAttackStage = 1; // 标记下次必胜
+                startDemonAttackDemo(); // 刷新界面
+            } else {
+                // 第二次：胜
+                alert("👑 皇城陷落！\n黑暗能量瓦解了防御。\n你成为了新任魔王！");
+                showBanner("全服通告：新的魔王诞生了！", "#800080");
+                demonAttackStage = 0; // 重置
+                closeDemo();
+            }
+        }, 1200);
+    }
+
+    // ==========================================
+    // 场景 D: 领地防守 (Patch 2.0 Logic)
+    // ==========================================
+    function startDemonDefenseDemo() {
+        setupDemoView("🛡️ 紧急回防", "好友正在掠夺你的金库！");
+        
+        const area = document.getElementById('demo-content-area');
+        area.innerHTML = `
+            <div style="background:#333; padding:15px; border-radius:8px; width:80%;">
+                <p>正在攻击你的人：</p>
+                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <span style="color:#ff4d4d">1. 隔壁老王 (-500金币)</span>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <span style="color:#ff4d4d">2. 龙傲天 (正在攻击大门...)</span>
+                </div>
+            </div>
+        `;
+        
+        const controls = document.getElementById('demo-controls');
+        controls.innerHTML = `<button onclick="alert('⚔️ 跳转至背包整理界面进行布防... (闭环)'); closeDemo();" style="padding:10px 30px; background:#b35900; color:white; border:none; cursor:pointer;">🛡️ 部署防御</button>`;
+    }
+
+    // 辅助：初始化演示窗口
+    function setupDemoView(title, subtitle) {
+        document.getElementById('social-feed-modal').style.display = 'none'; // 关掉Feed
+        const stage = document.getElementById('demo-stage');
+        stage.style.display = 'flex';
+        document.getElementById('demo-title').innerHTML = title;
+        document.getElementById('demo-subtitle').innerHTML = subtitle;
+    }
+</script>
 </body>
 </html>
