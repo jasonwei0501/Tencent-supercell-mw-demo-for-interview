@@ -3558,5 +3558,472 @@
     if(document.getElementById('world-map')) renderWorldMap();
     if(document.getElementById('territory-list-content')) renderTerritoryList();
     </script>
+    <style>
+    /* --- 1. 演示进度条 (Demo HUD) --- */
+    #demo-hud {
+        position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.7); padding: 5px 20px; border-radius: 20px;
+        color: white; font-size: 13px; z-index: 9000; border: 1px solid #444;
+        display: flex; gap: 10px; align-items: center; backdrop-filter: blur(4px);
+    }
+    .hud-dot { width: 8px; height: 8px; background: #555; border-radius: 50%; transition: 0.3s; }
+    .hud-dot.active { background: #ffd700; box-shadow: 0 0 8px #ffd700; }
+    .hud-dot.done { background: #0f0; }
+
+    /* --- 2. 社交入口 (初始隐藏) --- */
+    #social-hub-btn {
+        position: fixed; top: 20px; right: 20px; z-index: 9100;
+        background: rgba(0, 0, 0, 0.6); color: #fff; border: 1px solid #fff;
+        padding: 8px 15px; border-radius: 20px; font-size: 14px;
+        cursor: pointer; display: none; /* 初始隐藏 */
+        align-items: center; gap: 6px; transition: transform 0.2s;
+    }
+    #social-hub-btn:hover { transform: scale(1.05); background: rgba(0,0,0,0.8); }
+    .hub-red-dot { width: 8px; height: 8px; background: #ff4d4d; border-radius: 50%; animation: blink 1.5s infinite; }
+    @keyframes blink { 50% { opacity: 0.4; } }
+
+    /* --- 3. 社交面板 (The Feed) --- */
+    #social-feed-overlay {
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.85); z-index: 9200; justify-content: center; align-items: center;
+    }
+    .feed-window {
+        width: 360px; background: #1a1a1a; border-radius: 12px; border: 1px solid #444;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.8); overflow: hidden; animation: slideUp 0.3s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    
+    .feed-header {
+        background: linear-gradient(90deg, #222, #333); padding: 15px;
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid #555; color: white; font-weight: bold;
+    }
+    .feed-list { max-height: 60vh; overflow-y: auto; padding: 10px; }
+    
+    /* 动态卡片样式 */
+    .feed-card {
+        background: #252525; border-radius: 8px; padding: 12px; margin-bottom: 10px;
+        border-left: 4px solid #555; cursor: pointer; position: relative;
+    }
+    .feed-card:active { transform: scale(0.98); }
+    .card-hero { border-left-color: #ff4d4d; background: linear-gradient(90deg, #2a1010, #252525); } /* 魔王 */
+    .card-knight { border-left-color: #00d4ff; background: linear-gradient(90deg, #0a1a2a, #252525); } /* 骑士 */
+    .card-help { border-left-color: #28a745; background: linear-gradient(90deg, #0a200a, #252525); } /* 求援 */
+    
+    .card-top { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: bold; }
+    .card-desc { font-size: 12px; color: #ccc; line-height: 1.4; margin-bottom: 10px; }
+    .card-btn {
+        padding: 5px 12px; border-radius: 4px; border: none; font-size: 12px;
+        color: white; font-weight: bold; cursor: pointer; display: inline-block;
+    }
+
+    /* --- 4. 通用演示舞台 (Demo Stage) --- */
+    #demo-stage {
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: #000; z-index: 9500; flex-direction: column; align-items: center; padding-top: 80px; color: white;
+    }
+    .stage-screen {
+        width: 320px; height: 220px; background: #111; border: 2px solid #555;
+        position: relative; margin-bottom: 20px; overflow: hidden; border-radius: 8px;
+    }
+    .sprite { position: absolute; font-size: 28px; transition: all 0.5s; user-select: none; }
+
+    /* 诱惑弹窗 (背叛) */
+    #betrayal-popup {
+        display: none; position: absolute; top:0; left:0; width:100%; height:100%;
+        background: rgba(20,0,0,0.95); z-index: 9600; flex-direction: column;
+        justify-content: center; align-items: center; animation: fadeIn 0.3s;
+    }
+    
+    /* 解锁通知 */
+    #unlock-overlay {
+        display: none; position: fixed; top:0; left:0; width:100%; height:100%;
+        background: rgba(0,0,0,0.9); z-index: 9800; flex-direction: column;
+        justify-content: center; align-items: center; text-align: center;
+    }
+    .unlock-anim { animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+
+    /* 全局横幅 */
+    .top-toast {
+        position: fixed; top: -100px; left: 0; width: 100%; padding: 12px;
+        text-align: center; color: white; font-weight: bold; z-index: 9999;
+        transition: top 0.4s; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+</style>
+
+<div id="demo-hud">
+    <span>演示进度:</span>
+    <div id="p-dot-1" class="hud-dot active"></div>
+    <div id="p-dot-2" class="hud-dot"></div>
+    <div id="p-dot-3" class="hud-dot"></div>
+    <span id="hud-text" style="color:#aaa; margin-left:5px;">Lv.1 新手关</span>
+</div>
+
+<div id="social-hub-btn" onclick="toggleSocialFeed()">
+    <span class="hub-red-dot"></span> 社交动态
+</div>
+
+<div id="social-feed-overlay">
+    <div class="feed-window">
+        <div class="feed-header">
+            <span>🌍 微信好友动态</span>
+            <span style="cursor:pointer; font-size:20px;" onclick="toggleSocialFeed()">×</span>
+        </div>
+        <div class="feed-list" id="feed-content">
+            </div>
+    </div>
+</div>
+
+<div id="demo-stage">
+    <h2 id="stage-title" style="margin:0 0 5px 0; color:#ffd700;">演示标题</h2>
+    <p id="stage-sub" style="font-size:12px; color:#888; margin-bottom:20px;">...</p>
+    
+    <div id="stage-screen" class="stage-screen">
+        </div>
+    
+    <div id="betrayal-popup">
+        <div style="color:#ff4d4d; font-size:20px; font-weight:bold; margin-bottom:10px;">😈 敌方密谋</div>
+        <p style="color:#ccc; font-size:13px; margin-bottom:20px;">"嘿！我出 <b style="color:gold">2000金币</b>...<br>只要你现在干掉你的队友。"</p>
+        <div style="display:flex; gap:15px;">
+            <button onclick="resolveBetrayal(false)" style="padding:10px 20px; background:#444; border:1px solid #aaa; color:white; border-radius:6px; cursor:pointer;">🛡️ 拒绝</button>
+            <button onclick="resolveBetrayal(true)" style="padding:10px 20px; background:#800000; border:1px solid red; color:white; border-radius:6px; cursor:pointer;">🗡️ 背刺队友</button>
+        </div>
+    </div>
+
+    <div id="stage-controls"></div>
+    <div style="margin-top:20px; font-size:12px; color:#666; cursor:pointer;" onclick="closeDemoStage()">[结束演示]</div>
+</div>
+
+<div id="unlock-overlay" onclick="closeUnlock()">
+    <div class="unlock-anim" style="font-size:60px; margin-bottom:15px;">🔓</div>
+    <h2 class="unlock-anim" style="color:#00d4ff;">社交模块已解锁</h2>
+    <p class="unlock-anim" style="color:#ccc; font-size:14px; margin-top:10px;">通关新手教程！<br>现在可以体验核心的 <b style="color:gold">PVP与背刺</b> 玩法了。</p>
+    <div style="margin-top:30px; font-size:12px; color:#666;">(点击屏幕继续)</div>
+</div>
+
+<div id="top-toast" class="top-toast">通知</div>
+
+<script>
+    // =================================================================
+    // [逻辑核心] 劫持原有逻辑，注入演示脚本
+    // =================================================================
+
+    // 全局状态
+    let demoState = {
+        level: 1,           // 1=新手, 2=进阶, 3=解锁社交
+        demonAttempt: 0,    // 魔王尝试次数 (0=败, 1=胜)
+        isHijacked: true    // 是否处于劫持状态
+    };
+
+    // --- 初始化：劫持页面按钮 ---
+    window.addEventListener('load', function() {
+        console.log("Pitch Patch Loaded: Hijacking buttons...");
+        
+        // 使用定时器持续检查原代码生成的按钮（防止原代码异步渲染覆盖）
+        const hijacker = setInterval(() => {
+            if (!demoState.isHijacked) { clearInterval(hijacker); return; }
+
+            // 找到原版界面中的“征服”或“战斗”按钮
+            // 假设原代码使用了 class="mp-action-btn" 或包含 "征服" 字样的按钮
+            const btns = document.querySelectorAll('button');
+            btns.forEach(btn => {
+                const txt = btn.innerText;
+                if ((txt.includes('征服') || txt.includes('建立防守') || txt.includes('Battle')) && !btn.dataset.patched) {
+                    
+                    // 标记已修改
+                    btn.dataset.patched = "true";
+                    
+                    // 暴力替换点击事件 (Clone替换法)
+                    const newBtn = btn.cloneNode(true);
+                    btn.parentNode.replaceChild(newBtn, btn);
+                    
+                    // 绑定演示逻辑
+                    newBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        runRiggedLevel(); // <--- 触发暗改的战斗
+                    };
+                    
+                    // 视觉反馈：加个金色边框暗示这是“主线”
+                    newBtn.style.border = "2px solid #ffd700";
+                    newBtn.style.boxShadow = "0 0 10px rgba(255, 215, 0, 0.4)";
+                }
+            });
+        }, 500);
+        
+        // 初始化 Feed 内容
+        renderSocialFeed();
+    });
+
+    // --- 逻辑 1: 隐形上帝模式 (Rigged Levels) ---
+    function runRiggedLevel() {
+        if (demoState.level >= 3) {
+            alert("演示阶段已结束，您可以自由体验原版逻辑，或点击社交按钮体验核心玩法。");
+            return;
+        }
+
+        const title = demoState.level === 1 ? "⚔️ 第1关：新手试炼" : "⚔️ 第2关：精英挑战";
+        const enemyCount = demoState.level === 1 ? 3 : 8; // 第2关看上去很难
+        
+        setupStage(title, "正在加载本地战役...");
+        
+        // 渲染战斗画面 (模拟原版风格)
+        const screen = document.getElementById('stage-screen');
+        screen.innerHTML = `
+            <div style="position:absolute; bottom:20px; left:50%; transform:translateX(-50%); text-align:center;">
+                <div class="sprite">🛡️</div>
+                <div style="width:50px; height:4px; background:#0f0; margin-top:35px;"></div>
+            </div>
+            
+            <div id="enemy-group" style="position:absolute; top:20px; width:100%; text-align:center; transition:opacity 1s;">
+                ${Array(enemyCount).fill('<span style="font-size:24px; margin:2px;">👺</span>').join(demoState.level===2?'<br>':'')}
+                <div style="width:100px; height:4px; background:red; margin:5px auto;" id="enemy-hp"></div>
+            </div>
+        `;
+        
+        const controls = document.getElementById('stage-controls');
+        controls.innerHTML = `<div style="color:#ffd700; font-family:monospace; margin-top:10px;">> 战斗自动演算中 (God Mode)...</div>`;
+
+        // 剧本：必胜
+        setTimeout(() => {
+            // 1. 敌人掉血
+            document.getElementById('enemy-hp').style.width = "50%";
+            screen.style.transform = "translate(2px, 2px)"; // 震动
+            setTimeout(() => screen.style.transform = "none", 100);
+        }, 1000);
+
+        setTimeout(() => {
+            // 2. 敌人全灭
+            document.getElementById('enemy-group').style.opacity = "0";
+            document.getElementById('enemy-group').style.transform = "scale(1.2)";
+        }, 2000);
+
+        setTimeout(() => {
+            // 3. 结算
+            showToast(`🏆 第 ${demoState.level} 关胜利！`, "#28a745");
+            advanceProgress(); // 推进进度
+        }, 3000);
+    }
+
+    // --- 逻辑 2: 进度推进与解锁 ---
+    function advanceProgress() {
+        closeDemoStage();
+        
+        if (demoState.level === 1) {
+            demoState.level = 2;
+            updateHud(2, "Lv.2 精英关");
+        } else if (demoState.level === 2) {
+            demoState.level = 3;
+            updateHud(3, "社交已解锁");
+            
+            // 触发解锁动画
+            document.getElementById('unlock-overlay').style.display = 'flex';
+            
+            // 显示社交按钮
+            const btn = document.getElementById('social-hub-btn');
+            btn.style.display = 'flex';
+            
+            // 解除部分劫持 (可选，这里保持劫持为了方便演示)
+            // demoState.isHijacked = false; 
+        }
+    }
+
+    function closeUnlock() {
+        document.getElementById('unlock-overlay').style.display = 'none';
+        // 引导点击社交
+        const btn = document.getElementById('social-hub-btn');
+        btn.style.animation = "pulse 1s infinite";
+    }
+
+    // --- 逻辑 3: 社交动态流 (Social Feed) ---
+    function toggleSocialFeed() {
+        const el = document.getElementById('social-feed-overlay');
+        const btn = document.getElementById('social-hub-btn');
+        el.style.display = (el.style.display === 'flex') ? 'none' : 'flex';
+        btn.style.animation = "none"; // 停止引导动画
+    }
+
+    function renderSocialFeed() {
+        const list = document.getElementById('feed-content');
+        list.innerHTML = `
+            <div class="feed-card card-knight" onclick="runKnightDemo()">
+                <div class="card-top">
+                    <span style="color:#00d4ff">🛡️ 爵位空缺</span>
+                    <span style="color:#888">10分钟前</span>
+                </div>
+                <div class="card-desc">皇室护卫队正在招募指挥官。晋升后可激活 <b>[公会红包]</b> 特权。</div>
+                <button class="card-btn" style="background:#007bff">👑 申请晋升</button>
+            </div>
+
+            <div class="feed-card card-hero" onclick="runHeroDemo()">
+                <div class="card-top">
+                    <span style="color:#ff4d4d">🔥 恐怖降临</span>
+                    <span style="color:#888">刚刚</span>
+                </div>
+                <div class="card-desc">玩家 <b>"暴躁皮卡"</b> 成为了新任魔王！悬赏金池已累积至 50,000。</div>
+                <button class="card-btn" style="background:#ff4d4d">⚔️ 前往讨伐</button>
+            </div>
+
+            <div class="feed-card card-hero" onclick="runDemonDemo()">
+                <div class="card-top">
+                    <span style="color:#d8bfd8">😈 血脉觉醒</span>
+                    <span style="color:#888">30分钟前</span>
+                </div>
+                <div class="card-desc">感受到地底的黑暗召唤... 是否献祭金币觉醒魔王形态？</div>
+                <button class="card-btn" style="background:#800080">🩸 注入能量</button>
+            </div>
+
+            <div class="feed-card card-help" onclick="runBetrayalDemo()">
+                <div class="card-top">
+                    <span style="color:#28a745">🆘 紧急求援</span>
+                    <span style="color:#888">现在</span>
+                </div>
+                <div class="card-desc">好友 <b>"纯爱战士"</b> 正在防守 [哥布林军团]。战况危急，请求支援！</div>
+                <button class="card-btn" style="background:#28a745">➕ 加入战场</button>
+            </div>
+        `;
+    }
+
+    // --- 逻辑 4: 具体的 Demo 剧本 ---
+
+    // A. 讨伐魔王 (PVE 英雄感)
+    function runHeroDemo() {
+        setupStage("⚔️ 讨伐魔王", "全服BOSS战：第 108 代魔王");
+        const screen = document.getElementById('stage-screen');
+        
+        screen.innerHTML = `
+            <div class="sprite" style="top:20px; left:50%; transform:translateX(-50%); font-size:40px;">😈</div>
+            <div id="h-unit" class="sprite" style="bottom:20px; left:20%; font-size:24px; opacity:0;">🤕</div>
+        `;
+        
+        // 脚本：路人送死 -> 主角救世
+        setTimeout(() => { document.getElementById('h-unit').style.opacity=1; }, 500);
+        setTimeout(() => { document.getElementById('h-unit').innerHTML="💀"; showToast("队友阵亡！","#ff4d4d"); }, 1500);
+        setTimeout(() => { 
+            screen.innerHTML += `<div class="sprite" style="bottom:20px; left:50%; transform:translateX(-50%); font-size:30px; color:cyan;">👑</div>`;
+            showToast("你切入了战场！","#00d4ff");
+        }, 2500);
+        setTimeout(() => {
+            showToast("🏆 击杀魔王！获得赏金 5000！", "gold");
+            setTimeout(closeDemoStage, 2000);
+        }, 3500);
+    }
+
+    // B. 晋升骑士 (社交红包)
+    function runKnightDemo() {
+        setupStage("🛡️ 晋升仪式", "正在连接皇家服务器...");
+        setTimeout(() => {
+            showToast("🎉 晋升成功！特权已激活", "#007bff");
+            alert("🧧 演示重点：\n晋升后触发【全服发红包】功能。\n利用微信‘面子文化’促进裂变。");
+            closeDemoStage();
+        }, 1500);
+    }
+
+    // C. 魔王觉醒 (先败后胜)
+    function runDemonDemo() {
+        setupStage("🔥 攻陷皇城", "目标：击碎圣光护盾");
+        const screen = document.getElementById('stage-screen');
+        screen.innerHTML = `
+            <div style="position:absolute; top:20px; right:20px; font-size:40px;">🏰</div>
+            <div style="position:absolute; top:70px; right:20px; color:gold; font-size:12px;">护盾: 100%</div>
+            <div id="d-army" style="position:absolute; top:40px; left:-40px; font-size:30px; transition:left 1s;">😈</div>
+        `;
+        
+        // 进攻动画
+        setTimeout(() => document.getElementById('d-army').style.left = "100px", 500);
+
+        setTimeout(() => {
+            if (demoState.demonAttempt === 0) {
+                // 第一次：败
+                showToast("💀 进攻失败！护盾太厚", "#888");
+                alert("演示逻辑：\n第一次必败，制造挫败感。\n引导玩家点击【注入能量】(付费/活跃点)。");
+                demoState.demonAttempt = 1;
+                // 更新按钮状态暗示变强
+                const btn = document.querySelector('.card-hero button'); // 简单找一个
+                if(btn) btn.innerHTML = "🔥 再次尝试 (必胜)";
+            } else {
+                // 第二次：胜
+                showToast("👑 皇城陷落！你成为了魔王", "gold");
+                demoState.demonAttempt = 0;
+            }
+            closeDemoStage();
+        }, 2000);
+    }
+
+    // D. 战场背刺 (核心亮点)
+    function runBetrayalDemo() {
+        setupStage("🤝 联合作战", "正在支援好友...");
+        const screen = document.getElementById('stage-screen');
+        screen.innerHTML = `
+            <div style="position:absolute; bottom:20px; left:30%; font-size:28px;">🛡️ <span style="font-size:10px; display:block;">好友</span></div>
+            <div style="position:absolute; top:20px; right:30%; font-size:36px;">👺 <span style="font-size:10px; display:block;">BOSS</span></div>
+            <div id="my-unit" style="position:absolute; bottom:20px; right:-50px; font-size:28px; transition:all 0.5s;">⚔️ <span style="font-size:10px; display:block;">你</span></div>
+        `;
+
+        // 1. 进场
+        setTimeout(() => { document.getElementById('my-unit').style.right = "30%"; }, 800);
+        
+        // 2. 暂停，弹窗
+        setTimeout(() => {
+            screen.style.filter = "grayscale(0.8)";
+            document.getElementById('betrayal-popup').style.display = 'flex';
+        }, 2000);
+    }
+
+    function resolveBetrayal(isBetraying) {
+        const screen = document.getElementById('stage-screen');
+        const popup = document.getElementById('betrayal-popup');
+        popup.style.display = 'none';
+        screen.style.filter = "none";
+
+        if (isBetraying) {
+            // 背刺动画
+            const me = document.getElementById('my-unit');
+            me.style.right = "auto"; me.style.left = "40%"; // 瞬移到背后
+            me.style.transform = "scaleX(-1)"; // 转身
+            showToast("😱 你背刺了好友！获得双倍赏金", "#ff4d4d");
+            alert("社交传播点：\n好友会收到‘你为了2000金币出卖了他’的通知。\n这会触发好友的‘复仇悬赏’，形成闭环。");
+        } else {
+            showToast("🛡️ 忠诚！联手击败BOSS", "#28a745");
+        }
+        closeDemoStage();
+    }
+
+    // --- 辅助函数 ---
+    function setupStage(title, sub) {
+        toggleSocialFeed(); // 关掉 Feed
+        const stage = document.getElementById('demo-stage');
+        stage.style.display = 'flex';
+        document.getElementById('stage-title').innerText = title;
+        document.getElementById('stage-sub').innerText = sub;
+        document.getElementById('betrayal-popup').style.display = 'none'; // 重置弹窗
+        document.getElementById('stage-controls').innerHTML = ""; // 清空控制
+    }
+
+    function closeDemoStage() {
+        document.getElementById('demo-stage').style.display = 'none';
+        // 重新打开 Feed 方便演示下一个
+        if (demoState.level >= 3) document.getElementById('social-feed-overlay').style.display = 'flex';
+    }
+
+    function updateHud(lvl, text) {
+        document.querySelectorAll('.hud-dot').forEach((d, i) => {
+            d.classList.remove('active');
+            if (i < lvl) d.classList.add('done');
+            if (i === lvl - 1) d.classList.add('active');
+        });
+        document.getElementById('hud-text').innerText = text;
+    }
+
+    function showToast(text, color) {
+        const t = document.getElementById('top-toast');
+        t.innerText = text;
+        t.style.background = color || "#333";
+        t.style.top = "0";
+        setTimeout(() => t.style.top = "-100px", 3000);
+    }
+
+</script>
 </body>
 </html>
