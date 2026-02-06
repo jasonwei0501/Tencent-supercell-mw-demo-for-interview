@@ -3558,5 +3558,251 @@
     if(document.getElementById('world-map')) renderWorldMap();
     if(document.getElementById('territory-list-content')) renderTerritoryList();
     </script>
+    <style>
+    /* 1. 社交页面覆盖层 */
+    #final-social-layer {
+        display: none; 
+        position: fixed; 
+        top: 0; left: 0; 
+        width: 100%; height: 100%; /* 全屏覆盖，防止误触底部 */
+        background: #f4f5f7; /* 更加原生的浅灰背景 */
+        z-index: 9999; 
+        overflow-y: auto;
+        padding-bottom: 90px; /* 给底部导航栏留空 */
+    }
+
+    /* 头部导航 */
+    .final-header {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        padding: 15px 20px;
+        color: white;
+        font-weight: bold;
+        font-size: 18px;
+        display: flex; justify-content: space-between; align-items: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        position: sticky; top: 0; z-index: 100;
+    }
+
+    /* 容器 */
+    .final-container { padding: 20px; }
+
+    /* 卡片样式 */
+    .f-card {
+        background: white; border-radius: 12px; padding: 16px; margin-bottom: 15px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);
+        position: relative; overflow: hidden;
+    }
+    
+    .f-card::before {
+        content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+    }
+    .fc-red::before { background: #ff4757; }
+    .fc-green::before { background: #2ed573; }
+    .fc-blue::before { background: #1e90ff; }
+
+    .fc-title { display: flex; justify-content: space-between; font-weight: bold; font-size: 15px; margin-bottom: 8px; color: #333; }
+    .fc-desc { font-size: 13px; color: #666; line-height: 1.5; margin-bottom: 15px; }
+    
+    .fc-btn {
+        width: 100%; padding: 10px 0; border-radius: 8px; border: none;
+        color: white; font-weight: bold; cursor: pointer; font-size: 14px;
+        transition: opacity 0.2s;
+    }
+    .fc-btn:active { opacity: 0.8; }
+    .bg-red { background: linear-gradient(90deg, #ff6b81, #ff4757); }
+    .bg-green { background: linear-gradient(90deg, #7bed9f, #2ed573); }
+    .bg-blue { background: linear-gradient(90deg, #70a1ff, #1e90ff); }
+
+    /* 抉择弹窗 */
+    #final-modal {
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.6); z-index: 10000;
+        justify-content: center; align-items: center;
+        backdrop-filter: blur(3px);
+    }
+    .modal-content {
+        background: white; width: 85%; max-width: 320px; border-radius: 16px;
+        padding: 25px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+</style>
+
+<div id="final-social-layer">
+    <div class="final-header">
+        <span>🌍 微信好友动态</span>
+        <span style="font-size:14px; background:rgba(255,255,255,0.2); padding:4px 10px; border-radius:15px; cursor:pointer;" onclick="hideSocial()">关闭</span>
+    </div>
+
+    <div class="final-container">
+        <div class="f-card fc-red">
+            <div class="fc-title"><span>🔥 恐怖降临</span><span style="color:#999; font-size:12px;">15m</span></div>
+            <div class="fc-desc">玩家 <b>"暴躁皮卡"</b> 占领了皇城！<br>当前悬赏金：<span style="color:#ff4757; font-weight:bold;">5,000 金币</span></div>
+            <button class="fc-btn bg-red" onclick="bridgeToBattle('demon')">⚔️ 讨伐魔王</button>
+        </div>
+
+        <div class="f-card fc-green">
+            <div class="fc-title"><span>🆘 紧急求援</span><span style="color:#999; font-size:12px;">刚刚</span></div>
+            <div class="fc-desc">好友 <b>"纯爱战士"</b> 请求支援！<br>他正在防守哥布林大军。</div>
+            <button class="fc-btn bg-green" onclick="showModal()">➕ 加入战场</button>
+        </div>
+
+        <div class="f-card fc-blue">
+            <div class="fc-title"><span>🛡️ 爵位晋升</span><span style="color:#999; font-size:12px;">30m</span></div>
+            <div class="fc-desc">皇室正在分发本周津贴。<br>晋升即可解锁 <b>[公会红包]</b> 特权。</div>
+            <button class="fc-btn bg-blue" onclick="bridgeToBattle('gift')">🎁 领取津贴</button>
+        </div>
+        
+        <div style="text-align:center; margin-top:30px; color:#ccc; font-size:12px;">- End of Feed -</div>
+    </div>
+</div>
+
+<div id="final-modal">
+    <div class="modal-content">
+        <h3 style="margin-top:0; color:#333;">⚡ 战场抉择</h3>
+        <p style="color:#666; font-size:14px; line-height:1.6; margin-bottom:20px;">
+            敌方发来密信：<br>"倒戈吧，我给你 <b style="color:#ff9800">2000金币</b>..."
+        </p>
+        <div style="display:flex; gap:10px;">
+            <button class="fc-btn bg-green" onclick="bridgeToBattle('aid')">🛡️ 忠诚</button>
+            <button class="fc-btn bg-red" onclick="bridgeToBattle('betray')">🗡️ 背刺</button>
+        </div>
+        <div style="margin-top:15px; font-size:12px; color:#999; cursor:pointer;" onclick="closeModal()">取消操作</div>
+    </div>
+</div>
+
+<script>
+    // =================================================================
+    // [BRIDGE LOGIC v16.0] 自动归位修复脚本
+    // =================================================================
+
+    // 1. 基础开关
+    function showSocial() { document.getElementById('final-social-layer').style.display = 'block'; }
+    function hideSocial() { 
+        document.getElementById('final-social-layer').style.display = 'none'; 
+        closeModal();
+    }
+    function showModal() { document.getElementById('final-modal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('final-modal').style.display = 'none'; }
+
+    // 2. 导航监听 (精确制导)
+    // ---------------------------------------------------------------
+    document.body.addEventListener('click', function(e) {
+        // 如果点击的是我们自己的弹窗内部，不处理
+        if (e.target.closest('#final-social-layer') || e.target.closest('#final-modal')) return;
+
+        // 向上查找点击目标
+        let target = e.target;
+        let clickedText = "";
+        
+        // 获取点击元素的文本内容（包括子元素）
+        while(target && target !== document.body) {
+            clickedText = (target.innerText || "").trim();
+            
+            // A. 如果点击了【社交】按钮 -> 打开
+            if (clickedText.includes("社交")) {
+                showSocial();
+                return;
+            }
+
+            // B. 如果点击了【领土】【战斗】【商店】【我的】 -> 强制关闭
+            if (clickedText.includes("领土") || 
+                clickedText.includes("战斗") || 
+                clickedText.includes("商店") || 
+                clickedText.includes("我的")) {
+                hideSocial();
+                return;
+            }
+            
+            target = target.parentElement;
+        }
+        
+        // C. 点击了地图空白处或其他区域 -> 也建议关闭，防止遮挡
+        // (可选：如果不希望点击空白关闭，注释掉下面这行)
+        // hideSocial(); 
+    }, true);
+
+
+    // 3. 【核心修复】战斗桥接器 (Bridge to Battle)
+    // ---------------------------------------------------------------
+    window.bridgeToBattle = function(type) {
+        console.log("[Bridge] 准备进入战斗: " + type);
+
+        // 第一步：立刻关闭社交层
+        hideSocial();
+        
+        // 第二步：自动寻找并点击“领土”按钮 (Auto-Home)
+        // 这是为了让游戏引擎切回地图视图，准备渲染战斗
+        const navItems = document.querySelectorAll('div, button, span');
+        let homeClicked = false;
+        
+        for (let item of navItems) {
+            if (item.innerText && item.innerText.includes("领土") && !item.innerText.includes("社交")) {
+                console.log("[Bridge] 自动切换回领土视图");
+                item.click(); // 模拟点击
+                homeClicked = true;
+                break;
+            }
+        }
+
+        if (!homeClicked) {
+            console.warn("[Bridge] 未找到领土导航按钮，可能导致渲染失败");
+        }
+
+        // 第三步：延迟 100ms 等待视图切换完毕，然后注入战斗数据
+        setTimeout(() => {
+            launchRealEngine(type);
+        }, 100);
+    };
+
+
+    // 4. 启动原生引擎
+    function launchRealEngine(type) {
+        // 构造数据
+        let fakeTerritory = {
+            id: 9999 + Math.floor(Math.random()*100),
+            name: "未知区域",
+            resources: 100,
+            difficulty: 1,
+            owner: 'System'
+        };
+
+        if (type === 'demon') {
+            fakeTerritory.name = "🔥 魔王城 (PVP)";
+            fakeTerritory.desc = "击败暴躁皮卡";
+            fakeTerritory.resources = 5000;
+        } else if (type === 'aid') {
+            fakeTerritory.name = "🛡️ 支援前线";
+            fakeTerritory.desc = "忠诚卫士";
+            fakeTerritory.resources = 500;
+        } else if (type === 'betray') {
+            fakeTerritory.name = "🗡️ 背刺行动";
+            fakeTerritory.desc = "背叛者";
+            fakeTerritory.resources = 2000;
+        } else if (type === 'gift') {
+            alert("🎉 领取成功！+500金币");
+            return;
+        }
+
+        // 修改标题
+        const header = document.querySelector('.header-title') || document.querySelector('h1');
+        if(header) header.innerText = "⚔️ " + fakeTerritory.name;
+
+        // 调用原函数
+        if (typeof window.conquerTerritory === 'function') {
+            window.conquerTerritory(fakeTerritory);
+            
+            // 提示
+            const toast = document.createElement('div');
+            toast.style.cssText = "position:fixed; top:20%; left:50%; transform:translate(-50%,0); background:rgba(0,0,0,0.8); color:#ffd700; padding:10px 20px; border-radius:20px; z-index:9000; font-size:12px; pointer-events:none;";
+            toast.innerText = "⚡ 进入战场: " + fakeTerritory.name;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
+        } else {
+            console.error("未找到 conquerTerritory 函数");
+            alert("错误：无法启动战斗引擎 (conquerTerritory missing)");
+        }
+    }
+
+    console.log("Patch v16.0: Auto-Home Bridge Active.");
+</script>
 </body>
 </html>
