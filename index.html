@@ -3558,5 +3558,319 @@
     if(document.getElementById('world-map')) renderWorldMap();
     if(document.getElementById('territory-list-content')) renderTerritoryList();
     </script>
+    <style>
+    /* --- 1. 社交动态流容器 (寄生于原有页面) --- */
+    .pitch-social-container {
+        padding: 15px;
+        height: 100%;
+        overflow-y: auto;
+        background: #111; /*以此覆盖原有白色背景*/
+        color: white;
+        animation: fadeIn 0.3s;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .feed-header-native {
+        padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid #333;
+        font-size: 20px; font-weight: bold; color: #fff; display: flex; justify-content: space-between; align-items: center;
+    }
+
+    /* --- 2. 动态卡片样式 (保持高颜值) --- */
+    .feed-card {
+        background: #1e1e1e; border-radius: 10px; padding: 15px; margin-bottom: 15px;
+        border-left: 5px solid #555; cursor: pointer; position: relative;
+        transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .feed-card:active { transform: scale(0.98); }
+    
+    /* 不同类型的配色 */
+    .card-hero { border-left-color: #ff4d4d; background: linear-gradient(135deg, #2a1010 0%, #1e1e1e 100%); }
+    .card-knight { border-left-color: #00d4ff; background: linear-gradient(135deg, #0a1a2a 0%, #1e1e1e 100%); }
+    .card-help { border-left-color: #28a745; background: linear-gradient(135deg, #0a200a 0%, #1e1e1e 100%); }
+    
+    .card-top { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; font-weight: bold; }
+    .card-desc { font-size: 13px; color: #ccc; line-height: 1.5; margin-bottom: 12px; }
+    .card-btn {
+        padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px;
+        color: white; font-weight: bold; cursor: pointer; display: inline-block;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+
+    /* --- 3. 演示舞台 (全屏模态框) --- */
+    #demo-stage-modal {
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.95); z-index: 10000; flex-direction: column; 
+        align-items: center; justify-content: center; animation: zoomIn 0.2s;
+    }
+    @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    .stage-content {
+        width: 90%; max-width: 380px; background: #1a1a1a; border: 1px solid #444;
+        border-radius: 16px; padding: 20px; text-align: center; position: relative;
+        box-shadow: 0 0 50px rgba(0,0,0,0.8);
+    }
+    .stage-screen {
+        width: 100%; height: 220px; background: #000; border: 1px solid #333;
+        margin: 20px 0; position: relative; overflow: hidden; border-radius: 8px;
+    }
+    .sprite { position: absolute; font-size: 32px; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); user-select: none; }
+
+    /* 诱惑弹窗 (内嵌于舞台) */
+    #betrayal-overlay {
+        display: none; position: absolute; top:0; left:0; width:100%; height:100%;
+        background: rgba(20,0,0,0.92); z-index: 5; flex-direction: column;
+        justify-content: center; align-items: center;
+    }
+
+</style>
+
+<div id="demo-stage-modal">
+    <div class="stage-content">
+        <h2 id="stage-title" style="margin:0; color:#ffd700; font-size:20px;">演示标题</h2>
+        <p id="stage-sub" style="font-size:12px; color:#888; margin-bottom:0;">...</p>
+        
+        <div id="stage-screen" class="stage-screen"></div>
+        
+        <div id="betrayal-overlay">
+            <div style="color:#ff4d4d; font-size:18px; font-weight:bold; margin-bottom:10px;">😈 敌方密谋</div>
+            <p style="color:#ccc; font-size:13px; margin-bottom:20px; line-height:1.6;">"嘿！我出 <b style="color:gold">2000金币</b>...<br>只要你现在干掉你的队友。"</p>
+            <div style="display:flex; gap:15px;">
+                <button onclick="resolveBetrayal(false)" style="padding:10px 25px; background:#444; border:1px solid #aaa; color:white; border-radius:8px;">🛡️ 拒绝</button>
+                <button onclick="resolveBetrayal(true)" style="padding:10px 25px; background:#800000; border:1px solid red; color:white; border-radius:8px;">🗡️ 背刺</button>
+            </div>
+        </div>
+
+        <div style="margin-top:15px; font-size:14px; color:#666; cursor:pointer; padding:10px;" onclick="closeDemoStage()">× 关闭演示</div>
+    </div>
+</div>
+
+<script>
+    // =================================================================
+    // [PITCH LOGIC] 无缝劫持与演示脚本
+    // =================================================================
+
+    // 全局状态 - 默认全部解锁
+    const pitchState = {
+        demonAttempt: 0 // 记录魔王挑战次数 (0=败, 1=胜)
+    };
+
+    // 1. 核心劫持器 (Hijacker)
+    // ---------------------------------------------------------------
+    const navObserver = new MutationObserver((mutations) => {
+        // A. 劫持底部导航栏 (Target Navigation)
+        const navItems = document.querySelectorAll('button, div'); // 扫描所有可能的导航元素
+        navItems.forEach(item => {
+            // 特征识别：包含"社交"二字，且未被劫持
+            if (item.innerText && item.innerText.includes('社交') && !item.dataset.hooked) {
+                // 标记已处理
+                item.dataset.hooked = "true";
+                
+                // 暴力替换：克隆节点以移除原有事件监听器
+                const newItem = item.cloneNode(true);
+                item.parentNode.replaceChild(newItem, item);
+                
+                // 绑定我们的逻辑
+                newItem.onclick = (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    
+                    // 1. 视觉激活状态
+                    document.querySelectorAll('[data-hooked]').forEach(i => i.style.opacity = '0.5');
+                    newItem.style.opacity = '1';
+                    
+                    // 2. 渲染我们的页面
+                    hijackViewRender();
+                };
+            }
+        });
+
+        // B. 隐形上帝模式 (Silent God Mode for Main Map)
+        // 劫持"征服"按钮，确保演示不翻车，但没有任何视觉提示
+        const actionBtns = document.querySelectorAll('button');
+        actionBtns.forEach(btn => {
+            const txt = btn.innerText;
+            if ((txt.includes('征服') || txt.includes('建立防守')) && !btn.dataset.godmode) {
+                btn.dataset.godmode = "true";
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+                newBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    silentGodModeWin(newBtn);
+                };
+            }
+        });
+    });
+
+    // 启动观察器
+    navObserver.observe(document.body, { childList: true, subtree: true });
+
+
+    // 2. 视图渲染器 (View Renderer)
+    // ---------------------------------------------------------------
+    function hijackViewRender() {
+        // 找到主游戏容器 (尝试几个常见的 ID/Class)
+        const container = document.getElementById('world-map') || 
+                          document.querySelector('.game-content') || 
+                          document.querySelector('.p-4'); // Tailwind 常用容器
+        
+        if (container) {
+            // 直接覆盖内容
+            container.innerHTML = ''; 
+            container.appendChild(createSocialFeed());
+        } else {
+            // 如果找不到容器，全屏弹窗显示 (兜底方案)
+            alert("Debug: 找不到主容器，请检查页面结构");
+        }
+    }
+
+    function createSocialFeed() {
+        const div = document.createElement('div');
+        div.className = 'pitch-social-container';
+        div.innerHTML = `
+            <div class="feed-header-native">
+                <span>🌍 微信好友动态</span>
+                <span style="font-size:12px; color:#888; font-weight:normal;">4条新消息</span>
+            </div>
+            
+            <div class="feed-card card-knight" onclick="runDemo('knight')">
+                <div class="card-top"><span style="color:#00d4ff">🛡️ 爵位空缺</span><span>10分钟前</span></div>
+                <div class="card-desc">皇室护卫队正在招募指挥官。晋升后可激活 <b>[公会红包]</b> 特权。</div>
+                <div style="display:flex; justify-content:flex-end;">
+                    <button class="card-btn" style="background:#007bff">👑 申请晋升</button>
+                </div>
+            </div>
+
+            <div class="feed-card card-help" onclick="runDemo('betray')">
+                <div class="card-top"><span style="color:#28a745">🆘 紧急求援</span><span>刚刚</span></div>
+                <div class="card-desc">好友 <b>"纯爱战士"</b> 正在防守 [哥布林军团]。战况危急！</div>
+                <div style="display:flex; justify-content:flex-end;">
+                    <button class="card-btn" style="background:#28a745">➕ 加入战场</button>
+                </div>
+            </div>
+
+            <div class="feed-card card-hero" onclick="runDemo('hero')">
+                <div class="card-top"><span style="color:#ff4d4d">🔥 恐怖降临</span><span>15分钟前</span></div>
+                <div class="card-desc">玩家 <b>"暴躁皮卡"</b> 成为了新任魔王！悬赏金池已累积至 50,000。</div>
+                <div style="display:flex; justify-content:flex-end;">
+                    <button class="card-btn" style="background:#ff4d4d">⚔️ 前往讨伐</button>
+                </div>
+            </div>
+
+            <div class="feed-card card-hero" onclick="runDemo('demon')">
+                <div class="card-top"><span style="color:#d8bfd8">😈 血脉觉醒</span><span>30分钟前</span></div>
+                <div class="card-desc">感受到地底的黑暗召唤... 是否献祭金币觉醒魔王形态？</div>
+                <div style="display:flex; justify-content:flex-end;">
+                    <button class="card-btn" style="background:#800080">🩸 注入能量</button>
+                </div>
+            </div>
+            
+            <div style="text-align:center; color:#444; font-size:12px; margin-top:20px;">- 仅展示最近动态 -</div>
+        `;
+        return div;
+    }
+
+    // 3. 隐形上帝模式逻辑
+    // ---------------------------------------------------------------
+    function silentGodModeWin(btnElement) {
+        const originalText = btnElement.innerText;
+        btnElement.innerText = "⚔️ 战斗中...";
+        btnElement.disabled = true;
+
+        // 模拟一点延迟
+        setTimeout(() => {
+            // 简单的震动反馈
+            if(navigator.vibrate) navigator.vibrate(50);
+            
+            alert("🏆 战斗胜利！\n\n(演示模式：已自动接管战斗逻辑)");
+            btnElement.innerText = "✅ 已征服";
+            btnElement.style.background = "#333";
+            // 恢复按钮(可选)
+            // btnElement.disabled = false;
+        }, 1500);
+    }
+
+    // 4. 演示剧本 (Demo Scripts)
+    // ---------------------------------------------------------------
+    window.runDemo = function(type) {
+        const modal = document.getElementById('demo-stage-modal');
+        const screen = document.getElementById('stage-screen');
+        const title = document.getElementById('stage-title');
+        const sub = document.getElementById('stage-sub');
+        const overlay = document.getElementById('betrayal-overlay');
+        
+        modal.style.display = 'flex';
+        overlay.style.display = 'none';
+        screen.innerHTML = ''; // 清空舞台
+        
+        // --- 剧本 A: 讨伐魔王 (PVE) ---
+        if (type === 'hero') {
+            title.innerText = "⚔️ 讨伐魔王"; sub.innerText = "全服BOSS战演示";
+            screen.innerHTML = `<div class="sprite" style="top:20px; left:45%; font-size:40px;">😈</div>
+                                <div id="hero-pc" class="sprite" style="bottom:20px; left:20%; font-size:24px; opacity:0;">🤕</div>`;
+            
+            // 自动演算
+            setTimeout(() => { document.getElementById('hero-pc').style.opacity=1; }, 500);
+            setTimeout(() => { document.getElementById('hero-pc').innerHTML="💀"; }, 1500); // 队友死
+            setTimeout(() => { 
+                screen.innerHTML += `<div class="sprite" style="bottom:20px; left:45%; font-size:30px; color:cyan;">👑</div>`; // 主角出场
+            }, 2500);
+            setTimeout(() => { alert("🏆 击杀成功！获得赏金 5000"); closeDemoStage(); }, 3500);
+
+        // --- 剧本 B: 晋升骑士 (社交裂变) ---
+        } else if (type === 'knight') {
+            title.innerText = "🛡️ 晋升仪式"; sub.innerText = "连接皇家服务器...";
+            screen.innerHTML = `<div style="display:flex; justify-content:center; align-items:center; height:100%;">
+                                    <div style="font-size:60px; animation:spin 2s infinite;">⏳</div>
+                                </div>`;
+            setTimeout(() => { alert("🎉 晋升成功！\n\n[公会红包] 功能已激活。\n请在微信群分享你的爵位。"); closeDemoStage(); }, 1500);
+
+        // --- 剧本 C: 魔王觉醒 (先败后胜) ---
+        } else if (type === 'demon') {
+            title.innerText = "🔥 攻陷皇城"; sub.innerText = "目标：击碎圣光护盾";
+            screen.innerHTML = `<div style="position:absolute; top:20px; right:20px; font-size:40px;">🏰</div>
+                                <div id="d-army" class="sprite" style="top:50px; left:-40px; font-size:30px;">😈</div>`;
+            setTimeout(() => document.getElementById('d-army').style.left = "100px", 500);
+            setTimeout(() => {
+                if(pitchState.demonAttempt === 0) {
+                    alert("💀 进攻失败！\n\n(演示逻辑：首次必败，制造挫败感，引导点击[注入能量])"); 
+                    pitchState.demonAttempt = 1;
+                } else {
+                    alert("👑 皇城陷落！\n你成为了新任魔王。"); 
+                    pitchState.demonAttempt = 0;
+                }
+                closeDemoStage();
+            }, 2000);
+
+        // --- 剧本 D: 背刺 (人性抉择) ---
+        } else if (type === 'betray') {
+            title.innerText = "🤝 联合作战"; sub.innerText = "正在支援好友...";
+            screen.innerHTML = `<div class="sprite" style="bottom:20px; left:20%; font-size:28px;">🛡️</div>
+                                <div class="sprite" style="top:20px; right:20%; font-size:36px;">👺</div>
+                                <div id="my-unit" class="sprite" style="bottom:20px; right:-50px; font-size:28px;">⚔️</div>`;
+            // 进场
+            setTimeout(() => document.getElementById('my-unit').style.right = "20%", 800);
+            // 弹窗诱惑
+            setTimeout(() => { overlay.style.display = 'flex'; }, 2000); 
+        }
+    };
+
+    // 处理背刺选择
+    window.resolveBetrayal = function(isBetraying) {
+        document.getElementById('betrayal-overlay').style.display = 'none';
+        if (isBetraying) {
+            const me = document.getElementById('my-unit');
+            me.style.right = "auto"; me.style.left = "30%"; me.style.transform = "scaleX(-1)"; // 转身背刺
+            setTimeout(() => { alert("😱 你背刺了好友！\n获得双倍赏金。\n\n(好友将收到复仇通知)"); closeDemoStage(); }, 800);
+        } else {
+            alert("🛡️ 忠诚！联手击败BOSS"); closeDemoStage();
+        }
+    };
+
+    window.closeDemoStage = function() {
+        document.getElementById('demo-stage-modal').style.display = 'none';
+    };
+
+    console.log("Pitch Patch v10.0 Loaded: Native Social Integration Active.");
+</script>
 </body>
 </html>
